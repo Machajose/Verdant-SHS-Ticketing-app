@@ -1,1 +1,25 @@
-export default function TicketArtwork({event,ticket,message}){return <div className="relative aspect-[1776/896] w-full min-w-0 overflow-hidden rounded-xl bg-[#09291f]"><img src={event.ticketArtwork} alt={event.name+" admission ticket background"} className="absolute inset-0 h-full w-full object-cover"/><div className="absolute bottom-[2%] left-[4.5%] flex h-[20%] w-[67%] flex-col justify-center rounded-lg border border-white/10 bg-[#0d2b21]/90 px-[2%] shadow-lg backdrop-blur"><div className="text-[clamp(8px,1.15vw,12px)] font-bold uppercase leading-none tracking-[.13em] text-[#e5d59e]">{event.edition} · {ticket.ticketType} · {ticket.ticketId}</div><div className="mt-1 truncate font-display text-[clamp(14px,2.2vw,24px)] font-extrabold leading-none text-white">{ticket.fullName}</div><p className="mt-1 truncate text-[clamp(9px,1.3vw,13px)] font-medium leading-none text-white/85">{ticket.guestCount>1?"Admits "+ticket.guestCount+" guests · ":""}{message}</p></div><img src={ticket.qr} alt={"Scannable QR code for ticket "+ticket.ticketId} className="absolute aspect-square rounded-[2px] bg-white p-[.25%]" style={{left:"76.8%",top:"31.1%",width:"15.8%"}}/></div>}
+export default function TicketArtwork({event,ticket,message}) {
+  return <article className="ticket-artwork" aria-label={event.name+" admission ticket"}>
+    <section className="ticket-face">
+      <div className="ticket-pattern" aria-hidden="true"/>
+      <div className="ticket-event-heading">
+        <span className="ticket-university">MURANG’A UNIVERSITY OF TECHNOLOGY</span>
+        <span className="ticket-school">SCHOOL OF HEALTH SCIENCES</span>
+        <h2>Annual Gala</h2>
+        <p>HEALING HANDS · ELEGANT HEARTS</p>
+      </div>
+      <div className="ticket-guest-panel">
+        <div className="ticket-eyebrow">{ticket.department} <i/> {ticket.ticketType} <i/> {ticket.ticketId}</div>
+        <h3>{ticket.fullName}</h3>
+        <p>{ticket.guestCount>1?`Group admission · ${ticket.guestCount} guests · `:""}{message}</p>
+      </div>
+    </section>
+    <aside className="ticket-stub">
+      <span className="ticket-stub-kicker">ADMISSION PASS</span>
+      <div className="ticket-qr-frame"><img src={ticket.qr} alt={"QR code for ticket "+ticket.ticketId}/></div>
+      <strong>SCAN TO VERIFY</strong>
+      <span className="ticket-stub-code">{ticket.ticketId}</span>
+      <span className="ticket-stub-count">{ticket.guestCount} {ticket.guestCount===1?"ADMISSION":"ADMISSIONS"}</span>
+    </aside>
+  </article>;
+}
