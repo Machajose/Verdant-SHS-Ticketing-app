@@ -3,9 +3,11 @@ import { supabase } from "../lib/supabase";
 import { localPreviewEvent } from "../config/event";
 
 const packageLabels = { single: "Single admission", couple: "Couple", group_3: "Group of 3", group_5: "Group of 5" };
-function mapTicket(row, payments = []) {
+function mapTicket(row, payments = [], orders = []) {
   const count = Number(row.guest_count || 1);
   const orderPayments = row.order_id ? payments.filter(payment => payment.order_id === row.order_id) : [];
+  const order = row.order_id ? orders.find(item => item.id === row.order_id) : null;
+  const amountReceived = orderPayments.reduce((sum, payment) => sum + Number(payment.amount || 0), 0);
   const refs = orderPayments.map(payment => payment.mpesa_code).filter(Boolean);
   return {
     ...row,
@@ -17,7 +19,11 @@ function mapTicket(row, payments = []) {
     guestCount: count,
     pricePaid: Number(row.price_paid || 0),
     paymentRefs: refs,
-    payment_status: row.payment_status === "confirmed" ? "paid" : row.payment_status,
+    paymentRecords: orderPayments,
+    amountDue: Number(order?.amount_due || 0),
+    amountReceived,
+    balanceDue: Math.max(0, Number(order?.amount_due || 0) - amountReceived),
+    payment_status: order?.payment_status || (row.payment_status === "confirmed" ? "paid" : row.payment_status),
   };
 }
 function missingNewSchema(error) {
@@ -45,20 +51,22 @@ export function useTickets(user, notify, setScanResult, preview = false) {
         return;
       }
       if (!["admin", "pass-desk"].includes(activeRole)) throw new Error("This account is not allowed to open the workspace.");
-      const [legacyResult, passesResult, paymentsResult] = await Promise.all([
+      const [legacyResult, passesResult, paymentsResult, ordersResult] = await Promise.all([
         supabase.from("shs_gala_tickets").select("*").eq("event_id", localPreviewEvent.id).order("created_at", { ascending: false }),
         supabase.from("shs_gala_individual_passes").select("*").eq("event_id", localPreviewEvent.id).order("created_at", { ascending: false }),
-        supabase.from("shs_gala_payments").select("order_id,mpesa_code,amount"),
+        supabase.from("shs_gala_payments").select("order_id,mpesa_code,amount,created_at").order("created_at", { ascending: true }),
+        supabase.from("shs_gala_orders").select("id,amount_due,payment_status"),
       ]);
       if (legacyResult.error) throw legacyResult.error;
-      for (const result of [passesResult, paymentsResult]) if (result.error && !missingNewSchema(result.error)) throw result.error;
+      for (const result of [passesResult, paymentsResult, ordersResult]) if (result.error && !missingNewSchema(result.error)) throw result.error;
       const individualPasses = passesResult.error ? [] : passesResult.data || [];
       const payments = paymentsResult.error ? [] : paymentsResult.data || [];
+      const orders = ordersResult.error ? [] : ordersResult.data || [];
       const orderTotals = new Map();
       for (const payment of payments) orderTotals.set(payment.order_id, (orderTotals.get(payment.order_id) || 0) + Number(payment.amount || 0));
       const seenOrders = new Set();
       const combined = [...(legacyResult.data || []), ...individualPasses].map(row => {
-        const ticket = mapTicket(row, payments);
+        const ticket = mapTicket(row, payments, orders);
         if (row.order_id) {
           ticket.pricePaid = seenOrders.has(row.order_id) ? 0 : (orderTotals.get(row.order_id) || 0);
           seenOrders.add(row.order_id);
@@ -79,7 +87,7 @@ export function useTickets(user, notify, setScanResult, preview = false) {
 
   const createTicket = useCallback(async ({ packageType, amountDue, attendees, phone, payments }) => {
     if (!event) throw new Error("Event details have not loaded yet.");
-    const cleanPayments = payments.map(payment => ({ mpesaCode: payment.mpesaCode.trim().toUpperCase(), amount: Number(payment.amount) }));
+    const cleanPayments = payments.filter(payment => payment.mpesaCode.trim() && Number(payment.amount) > 0).map(payment => ({ mpesaCode: payment.mpesaCode.trim().toUpperCase(), amount: Number(payment.amount) }));
     const knownCodes = new Set(tickets.flatMap(ticket => String(ticket.mpesaCode || "").split(",").map(code => code.trim().toUpperCase()).filter(Boolean)));
     const repeated = cleanPayments.find(payment => knownCodes.has(payment.mpesaCode));
     if (repeated) throw new Error("That M-Pesa reference is already attached to another purchase.");
@@ -95,15 +103,16 @@ export function useTickets(user, notify, setScanResult, preview = false) {
         ticket_code: `SHS${String(nextNumber + index).padStart(4, "0")}`,
         qr_token: crypto.randomUUID(), full_name: attendee.fullName, phone,
         department: attendee.department, package_type: packageType, guest_count: 1,
-        mpesa_code: null, payment_status: "paid", status: "Not checked in",
+        mpesa_code: null, status: "Not checked in",
+        payment_status: paymentTotal >= Number(amountDue) ? "paid" : "pending",
         price_paid: index === 0 ? paymentTotal : 0, currency: "KES", issued_by: user.id,
         created_at: now,
-      }, cleanPayments));
+      }, cleanPayments, [{ id: orderId, amount_due: Number(amountDue), payment_status: paymentTotal >= Number(amountDue) ? "paid" : "pending" }]));
       setTickets(current => [...created, ...current]);
       return created;
     }
 
-    const { data, error } = await supabase.rpc("issue_shs_gala_purchase", {
+    const { data, error } = await supabase.rpc("issue_shs_gala_purchase_with_balance", {
       p_event_id: event.id,
       p_package_type: packageType,
       p_guest_count: count,
@@ -126,10 +135,50 @@ export function useTickets(user, notify, setScanResult, preview = false) {
       throw error;
     }
     const created = (Array.isArray(data) ? data : data?.passes || []).map(row => mapTicket(row, cleanPayments.map(payment => ({ ...payment, order_id: row.order_id }))));
+    created.forEach(ticket => {
+      ticket.amountDue = Number(amountDue);
+      ticket.amountReceived = paymentTotal;
+      ticket.balanceDue = Math.max(0, Number(amountDue) - paymentTotal);
+      ticket.payment_status = paymentTotal >= Number(amountDue) ? "paid" : "pending";
+    });
     if (created[0]) created[0].pricePaid = paymentTotal;
     setTickets(current => [...created, ...current]);
     return created;
   }, [event, tickets, user.id, preview]);
+
+  const recordPayment = useCallback(async (ticket, payment) => {
+    const code = payment.mpesaCode.trim().toUpperCase();
+    const amount = Number(payment.amount);
+    if (!ticket.order_id || code.length < 6 || !Number.isFinite(amount) || amount <= 0) throw new Error("Enter a valid M-Pesa code and amount.");
+    const duplicate = tickets.some(item => String(item.mpesaCode || "").split(",").some(ref => ref.trim().toUpperCase() === code));
+    if (duplicate) throw new Error("That M-Pesa reference is already attached to another purchase.");
+    if (preview) {
+      const balance = Number(ticket.balanceDue || 0);
+      if (amount > balance) throw new Error("This payment is more than the remaining balance.");
+      const received = Number(ticket.amountReceived || 0) + amount;
+      const due = Number(ticket.amountDue || 0);
+      const status = received >= due ? "paid" : "pending";
+      const firstPassId = tickets.find(item => item.order_id === ticket.order_id)?.id;
+      const paymentRecord = { mpesa_code: code, amount, created_at: new Date().toISOString() };
+      const updateOrder = item => item.order_id === ticket.order_id ? { ...item, amountReceived: received, balanceDue: Math.max(0, due - received), payment_status: status, mpesaCode: [item.mpesaCode, code].filter(Boolean).join(", "), paymentRecords: [...(item.paymentRecords || []), paymentRecord], pricePaid: item.id === firstPassId ? received : 0 } : item;
+      setTickets(current => current.map(updateOrder));
+      return { ...ticket, amountReceived: received, balanceDue: Math.max(0, due - received), payment_status: status, mpesaCode: [ticket.mpesaCode, code].filter(Boolean).join(", "), paymentRecords: [...(ticket.paymentRecords || []), paymentRecord] };
+    }
+    const { data, error } = await supabase.rpc("record_shs_gala_payment", { p_order_id: ticket.order_id, p_mpesa_code: code, p_amount: amount });
+    if (error) {
+      if (error.code === "23505") throw new Error("That M-Pesa transaction code has already been used.");
+      throw error;
+    }
+    const result = Array.isArray(data) ? data[0] : data;
+    const amountReceived = Number(result?.amount_received ?? (Number(ticket.amountReceived || 0) + amount));
+    const amountDue = Number(result?.amount_due ?? ticket.amountDue ?? 0);
+    const paymentStatus = result?.payment_status || (amountReceived >= amountDue ? "paid" : "pending");
+    const firstPassId = tickets.find(item => item.order_id === ticket.order_id)?.id;
+    const paymentRecord = { mpesa_code: code, amount, created_at: new Date().toISOString() };
+    const updateOrder = item => item.order_id === ticket.order_id ? { ...item, amountReceived, balanceDue: Math.max(0, amountDue - amountReceived), payment_status: paymentStatus, mpesaCode: [item.mpesaCode, code].filter(Boolean).join(", "), paymentRecords: [...(item.paymentRecords || []), paymentRecord], pricePaid: item.id === firstPassId ? amountReceived : 0 } : item;
+    setTickets(current => current.map(updateOrder));
+    return { ...ticket, amountDue, amountReceived, balanceDue: Math.max(0, amountDue - amountReceived), payment_status: paymentStatus, mpesaCode: [ticket.mpesaCode, code].filter(Boolean).join(", "), paymentRecords: [...(ticket.paymentRecords || []), paymentRecord] };
+  }, [tickets, preview, refresh]);
 
   const checkIn = useCallback(async ticket => {
     try {
@@ -184,5 +233,5 @@ export function useTickets(user, notify, setScanResult, preview = false) {
     };
   }, [tickets]);
 
-  return { tickets, event, role, loading, loadError, refresh, createTicket, checkIn, lookupPass, stats };
+  return { tickets, event, role, loading, loadError, refresh, createTicket, recordPayment, checkIn, lookupPass, stats };
 }

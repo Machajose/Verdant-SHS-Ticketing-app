@@ -12,6 +12,7 @@ export default function TicketArtwork({event,ticket,message}) {
         <div className="ticket-eyebrow">{ticket.department} <i/> {ticket.ticketType} <i/> {ticket.ticketId}</div>
         <h3>{ticket.fullName}</h3>
         <p>{ticket.guestCount>1?`Group admission · ${ticket.guestCount} guests · `:""}{message}</p>
+        {ticket.payment_status !== "paid" && <div className="ticket-pending-mark">PAYMENT PENDING · NOT VALID FOR ENTRY</div>}
       </div>
     </section>
     <aside className="ticket-stub">

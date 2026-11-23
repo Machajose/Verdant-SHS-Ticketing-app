@@ -13,6 +13,7 @@ end $$;
 drop function if exists public.check_in_shs_gala_pass(uuid);
 drop function if exists public.search_shs_gala_checkin_pass(text);
 drop function if exists public.issue_shs_gala_purchase(uuid,text,smallint,numeric,text,jsonb,jsonb);
+drop function if exists public.record_shs_gala_payment(uuid,text,numeric);
 drop table if exists public.shs_gala_individual_passes;
 drop table if exists public.shs_gala_payments;
 drop table if exists public.shs_gala_orders;

@@ -11,6 +11,10 @@ export async function downloadTicketArtwork(event,ticket,message){
   c.fillStyle="#d8eee0";c.font="600 20px Arial";c.fillText("SCHOOL OF HEALTH SCIENCES",76,122);
   c.fillStyle="#fff";c.font="600 82px Georgia";c.fillText("Annual Gala",74,226);
   c.fillStyle="#d8eee0";c.font="600 21px Arial";c.fillText("HEALING HANDS · ELEGANT HEARTS",78,273);
+  if(ticket.payment_status!=="paid"){
+    roundRect(c,74,470,520,52,10,"#7a281c");
+    c.fillStyle="#fff";c.font="700 20px Arial";c.fillText("PAYMENT PENDING · NOT VALID FOR ENTRY",94,503,480);
+  }
   roundRect(c,54,555,1205,280,18,"rgba(5,39,24,.94)");
   c.fillStyle="#cce9d5";c.font="600 22px Arial";
   const meta=(ticket.department+"   ·   "+ticket.ticketType+"   ·   "+ticket.ticketId).toUpperCase();
