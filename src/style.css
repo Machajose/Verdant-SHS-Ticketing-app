@@ -72,3 +72,18 @@ h1,h2,p{margin-top:0}.overview-mast{background:#111;color:white;min-height:300px
 .hero-poster-close:hover{background:#252525}
 @media(max-width:760px){.overview-mast{display:flex!important;flex-direction:column;align-items:stretch;gap:18px;width:min(345px,calc(100vw - 30px))!important;min-width:0;max-width:calc(100vw - 30px);overflow:hidden}.hero-poster-area{position:relative;left:auto;align-self:center;width:100%;min-width:0;max-width:100%;justify-content:center;margin:0;padding:0 8px 8px;transform:none}.hero-poster-ticket{width:min(220px,78vw);transform:none;box-shadow:3px 3px 0 var(--volt),0 14px 28px #0008}.hero-poster-ticket:hover{transform:translateY(-2px);box-shadow:3px 3px 0 var(--volt),0 17px 30px #0009}.overview-mast:before{width:340px;height:420px;right:calc(50% - 170px);top:auto;bottom:-60px;transform:none;filter:blur(30px);opacity:.12}}
 @media(prefers-reduced-motion:reduce){.hero-poster-ticket,.hero-poster-ticket:hover{transform:none;transition:none}}
+
+/* Individual guest and payment rows in group purchases. */
+.purchase-guests,.purchase-payments{display:grid;gap:10px}
+.purchase-guests>h3,.purchase-payment-heading h3{margin:0;color:#263c2e;font-size:12px;font-weight:700}
+.purchase-guest{display:grid;grid-template-columns:52px minmax(0,1fr) minmax(0,1fr);align-items:end;gap:9px;padding:11px;border:1px solid #dce6de;border-radius:10px;background:#fbfcfb}
+.purchase-guest-number{align-self:center;color:#286b45;font-size:9px;font-weight:700}
+.purchase-payment-heading{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.payment-add-button{display:inline-flex;align-items:center;gap:5px;padding:6px 9px;border:1px solid #dce6de;border-radius:7px;background:#fff;color:#17683d;font-size:9px;font-weight:700}
+.payment-amount-wrap{display:flex;align-items:center;gap:6px}
+.payment-amount-wrap .form-input{min-width:0}
+.payment-amount-wrap button{display:grid;place-items:center;width:36px;height:36px;border:1px solid #ead8d7;border-radius:8px;background:#fff;color:#9e342c}
+.purchase-total{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:10px 12px;border-radius:9px;background:#f2f7f1;color:#516054;font-size:10px}
+.purchase-total strong{color:#163d28;font-variant-numeric:tabular-nums}
+.purchase-total span:last-child{margin-left:auto}
+@media(max-width:620px){.purchase-guest{grid-template-columns:44px minmax(0,1fr);gap:8px}.purchase-guest .ticket-field:last-child{grid-column:2}.purchase-total span:last-child{width:100%;margin-left:0}}
